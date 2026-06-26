@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BSM European Option Pricer</title>
+<style>
+  :root {
+    --bg:      #08070a;
+    --surf:    #0e0c12;
+    --surf2:   #131019;
+    --border:  #1e1a28;
+    --border2: #2a2440;
+    --blue:    #4f8ef7;
+    --cyan:    #38c8e0;
+    --green:   #45c97b;
+    --amber:   #f0a030;
+    --red:     #e05050;
+    --purple:  #a077f0;
+    --text:    #d8d0e8;
+    --muted:   #6a6080;
+    --mono:    'Consolas','JetBrains Mono','Courier New',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:13px;height:100vh;overflow:hidden;}
+
+  header{
+    display:flex;align-items:center;gap:12px;
+    padding:10px 20px;
+    background:var(--surf);
+    border-bottom:1px solid var(--border);
+  }
+  .hchip{
+    font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1.5px;
+    color:var(--cyan);background:rgba(56,200,224,.08);
+    border:1px solid rgba(56,200,224,.2);
+    padding:3px 8px;border-radius:3px;
+  }
+  header h1{font-size:14px;font-weight:600;color:var(--text);}
+  .hsub{font-size:11px;color:var(--muted);margin-left:2px;}
+  .hstats{margin-left:auto;display:flex;gap:20px;}
+  .hstat{text-align:right;}
+  .hstat .lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
+  .hstat .val{font-family:var(--mono);font-size:13px;color:var(--green);}
+  .hstat .val.warn{color:var(--amber);}
+
+  .layout{display:grid;grid-template-columns:248px 1fr;height:calc(100vh - 41px);}
+
+  /* ── LEFT PANEL ── */
+  .left{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+
+  .sec{
+    font-size:9px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;
+    color:var(--muted);padding:8px 14px 5px;
+    background:var(--surf2);border-bottom:1px solid var(--border);
+    border-top:1px solid var(--border);
+    position:sticky;top:0;z-index:1;
+  }
+  .sec:first-child{border-top:none;}
+
+  /* type selector */
+  .type-row{display:flex;margin:8px 14px;}
+  .type-row input{display:none;}
+  .type-row label{
+    flex:1;text-align:center;padding:6px;cursor:pointer;
+    font-size:12px;font-weight:600;letter-spacing:.5px;
+    border:1px solid var(--border2);color:var(--muted);
+    transition:all .12s;
+  }
+  .type-row label:first-of-type{border-radius:4px 0 0 4px;}
+  .type-row label:last-of-type{border-radius:0 4px 4px 0;}
+  .type-row input:checked+label{
+    background:var(--blue);color:#fff;border-color:var(--blue);
+    box-shadow:0 0 10px rgba(79,142,247,.35);
+  }
+
+  /* sliders */
+  .sliders{padding:8px 14px 4px;display:flex;flex-direction:column;gap:7px;}
+  .srow{display:grid;grid-template-columns:38px 1fr 52px;align-items:center;gap:6px;}
+  .srow label{font-size:10px;color:var(--muted);text-align:right;font-family:var(--mono);}
+  .srow input[type=range]{
+    width:100%;height:3px;-webkit-appearance:none;appearance:none;
+    background:var(--border2);border-radius:2px;cursor:pointer;outline:none;
+  }
+  .srow input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:11px;height:11px;border-radius:2px;
+    background:var(--blue);cursor:pointer;
+    box-shadow:0 0 5px rgba(79,142,247,.5);
+  }
+  .sval{font-family:var(--mono);font-size:12px;color:var(--cyan);text-align:right;}
+
+  /* results */
+  .results{padding:6px 14px 8px;}
+  .rrow{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:3px 0;border-bottom:1px solid rgba(30,26,40,.6);
+  }
+  .rrow.sep{border-bottom:1px solid var(--border);margin:4px 0 2px;}
+  .rk{font-size:10px;color:var(--muted);}
+  .rv{font-family:var(--mono);font-size:12px;color:var(--text);}
+  .rv.big{font-size:16px;color:var(--cyan);text-shadow:0 0 8px rgba(56,200,224,.4);}
+  .rv.pos{color:var(--green);}
+  .rv.neg{color:var(--red);}
+  .rv.acc{color:var(--amber);}
+
+  /* ── RIGHT AREA ── */
+  .right{display:grid;grid-template-rows:minmax(0,1fr) 188px;overflow:hidden;}
+  .charts{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;overflow:hidden;}
+  .cpane{
+    border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+    padding:10px 12px 8px;display:flex;flex-direction:column;overflow:hidden;
+  }
+  .cpane:nth-child(2n){border-right:none;}
+  .cpane:nth-child(n+3){border-bottom:none;}
+  .ctitle{font-size:9px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;flex-shrink:0;}
+
+  /* scenario matrix */
+  .matarea{
+    border-top:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(19,16,25,.98),rgba(14,12,18,.98));
+    padding:10px 16px 12px;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .mat-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-shrink:0;}
+  .mattitle{font-size:10px;font-weight:700;color:var(--text);letter-spacing:1.4px;text-transform:uppercase;}
+  .matsub{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;}
+  .matstats{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+  .mchip{font-family:var(--mono);font-size:10px;padding:3px 7px;border:1px solid var(--border2);border-radius:999px;background:rgba(255,255,255,.025);color:var(--muted);white-space:nowrap;}
+  .mchip.base{color:var(--cyan);border-color:rgba(56,200,224,.30);background:rgba(56,200,224,.08);}
+  .mchip.pos{color:var(--green);border-color:rgba(69,201,123,.30);background:rgba(69,201,123,.08);}
+  .mchip.neg{color:var(--red);border-color:rgba(224,80,80,.30);background:rgba(224,80,80,.08);}
+  .matwrap{min-height:0;overflow:auto;border:1px solid var(--border);border-radius:7px;background:rgba(8,7,10,.35);padding:5px;}
+  table.mat{border-collapse:separate;border-spacing:3px;font-family:var(--mono);font-size:11px;white-space:nowrap;width:100%;min-width:620px;}
+  table.mat th, table.mat td{padding:5px 9px;text-align:right;border-radius:5px;}
+  table.mat th{color:var(--muted);font-weight:700;font-size:10px;letter-spacing:.35px;background:rgba(255,255,255,.025);border:1px solid rgba(42,36,64,.55);}
+  table.mat td{font-weight:700;border:1px solid transparent;transition:transform .08s ease, filter .08s ease, border-color .08s ease;}
+  table.mat td:hover{transform:translateY(-1px);filter:brightness(1.18);border-color:rgba(216,208,232,.28);}
+  .mat-corner{position:sticky;left:0;z-index:2;text-align:left!important;color:var(--cyan)!important;}
+  .mat-rowhdr{position:sticky;left:0;z-index:1;text-align:left!important;color:var(--text)!important;background:var(--surf2)!important;border:1px solid var(--border2)!important;}
+  .mat-zero{outline:2px solid var(--cyan)!important;box-shadow:0 0 0 1px rgba(56,200,224,.15),0 0 12px rgba(56,200,224,.18);}
+  .mat-note{display:flex;justify-content:space-between;gap:10px;align-items:center;font-family:var(--mono);font-size:9px;color:var(--muted);flex-shrink:0;}
+  .mat-legend{display:flex;align-items:center;gap:6px;}
+  .lg{width:34px;height:6px;border-radius:99px;display:inline-block;border:1px solid rgba(255,255,255,.08);}
+  .lg.neg{background:linear-gradient(90deg,rgba(224,80,80,.16),rgba(224,80,80,.72));}
+  .lg.pos{background:linear-gradient(90deg,rgba(69,201,123,.16),rgba(69,201,123,.72));}
+  .cp{color:#d8ffe8;}
+  .cn{color:#ffe0e0;}
+  .cz{color:#c8bddc;}
+
+  canvas{display:block;width:100%;height:100%;}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="hchip">BSM</span>
+  <h1>Black-Scholes-Merton Pricer<span class="hsub"> · European Options · Merton (1973)</span></h1>
+  <div class="hstats">
+    <div class="hstat"><div class="lbl">Put-Call Parity</div><div class="val" id="hPCP">—</div></div>
+    <div class="hstat"><div class="lbl">IV Round-Trip</div><div class="val" id="hIV">—</div></div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <div class="left">
+    <div class="sec">Type</div>
+    <div class="type-row">
+      <input type="radio" id="rC" name="ot" value="call" checked>
+      <label for="rC">CALL</label>
+      <input type="radio" id="rP" name="ot" value="put">
+      <label for="rP">PUT</label>
+    </div>
+
+    <div class="sec">Parameters</div>
+    <div class="sliders" id="sliders"></div>
+
+    <div class="sec">Pricing</div>
+    <div class="results">
+      <div class="rrow"><span class="rk">Price</span><span class="rv big" id="rPrice">—</span></div>
+      <div class="rrow"><span class="rk">Intrinsic</span><span class="rv" id="rIntr">—</span></div>
+      <div class="rrow"><span class="rk">Time Value</span><span class="rv" id="rTV">—</span></div>
+      <div class="rrow"><span class="rk">Forward F</span><span class="rv" id="rFwd">—</span></div>
+      <div class="rrow"><span class="rk">d₁</span><span class="rv" id="rD1">—</span></div>
+      <div class="rrow"><span class="rk">d₂</span><span class="rv" id="rD2">—</span></div>
+      <div class="rrow"><span class="rk">ln(F/K)</span><span class="rv" id="rLFM">—</span></div>
+    </div>
+
+    <div class="sec">First-Order Greeks</div>
+    <div class="results">
+      <div class="rrow"><span class="rk">Delta  ∂V/∂S</span><span class="rv acc" id="rDelta">—</span></div>
+      <div class="rrow"><span class="rk">Gamma  ∂²V/∂S²</span><span class="rv" id="rGamma">—</span></div>
+      <div class="rrow"><span class="rk">Vega   ∂V/∂σ (per 1%)</span><span class="rv" id="rVega">—</span></div>
+      <div class="rrow"><span class="rk">Theta  dV/dt (per day)</span><span class="rv neg" id="rTheta">—</span></div>
+      <div class="rrow"><span class="rk">Rho    ∂V/∂r (per 1%)</span><span class="rv" id="rRho">—</span></div>
+    </div>
+
+    <div class="sec">Second-Order Greeks</div>
+    <div class="results">
+      <div class="rrow"><span class="rk">Vanna  ∂Δ/∂σ</span><span class="rv" id="rVanna">—</span></div>
+      <div class="rrow"><span class="rk">Volga  ∂²V/∂σ²</span><span class="rv" id="rVolga">—</span></div>
+      <div class="rrow"><span class="rk">Charm  dΔ/dt (per day)</span><span class="rv" id="rCharm">—</span></div>
+      <div class="rrow"><span class="rk">Speed  ∂Γ/∂S</span><span class="rv" id="rSpeed">—</span></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="charts">
+      <div class="cpane">
+        <div class="ctitle">Option Price &amp; Payoff vs Spot</div>
+        <canvas id="cPay"></canvas>
+      </div>
+      <div class="cpane">
+        <div class="ctitle">Delta &amp; Gamma vs Spot</div>
+        <canvas id="cDG"></canvas>
+      </div>
+      <div class="cpane">
+        <div class="ctitle">Vega &amp; Theta vs Spot</div>
+        <canvas id="cVT"></canvas>
+      </div>
+      <div class="cpane">
+        <div class="ctitle">Price vs Implied Volatility</div>
+        <canvas id="cVol"></canvas>
+      </div>
+    </div>
+
+    <div class="matarea">
+      <div class="mat-head">
+        <div>
+          <div class="mattitle">P&amp;L Matrix — Spot Shock × Vol-Point Shock</div>
+          <div class="matsub">Cells show ΔPrice vs current option value. Vol shock is absolute vol points.</div>
+        </div>
+        <div class="matstats" id="matStats"></div>
+      </div>
+      <div class="matwrap" id="matWrap"></div>
+      <div class="mat-note">
+        <span>Rows: spot move. Columns: volatility-point move.</span>
+        <span class="mat-legend"><span>Loss</span><span class="lg neg"></span><span>0</span><span class="lg pos"></span><span>Gain</span></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  BSM ENGINE  — all formulas verified analytically + vs FD
+// ════════════════════════════════════════════════════════════════
+
+function normCDF(x) {
+  // Abramowitz & Stegun 26.2.17 — max error 7.5e-8
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+  const poly = t * (0.319381530 + t * (-0.356563782
+    + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const z = 1 - d * poly;
+  return x >= 0 ? z : 1 - z;
+}
+function normPDF(x) { return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI); }
+
+function bsmD1(S, K, T, r, q, s) {
+  if (T < 1e-9 || s < 1e-9)
+    return S * Math.exp((r - q) * T) >= K ? Infinity : -Infinity;
+  return (Math.log(S / K) + (r - q + 0.5 * s * s) * T) / (s * Math.sqrt(T));
+}
+function bsmD2(S, K, T, r, q, s) {
+  return bsmD1(S, K, T, r, q, s) - s * Math.sqrt(T);
+}
+
+// ── Price ──────────────────────────────────────────────────────
+// C = S·e^{-qT}·Φ(d1) − K·e^{-rT}·Φ(d2)
+// P = K·e^{-rT}·Φ(-d2) − S·e^{-qT}·Φ(-d1)
+function bsmPrice(S, K, T, r, q, s, isCall) {
+  if (T <= 1e-9) return Math.max((isCall ? 1 : -1) * (S - K), 0);
+  const phi = isCall ? 1 : -1;
+  const d1 = bsmD1(S, K, T, r, q, s), d2 = bsmD2(S, K, T, r, q, s);
+  return phi * (S * Math.exp(-q * T) * normCDF(phi * d1)
+              - K * Math.exp(-r * T) * normCDF(phi * d2));
+}
+
+// ── Delta ──────────────────────────────────────────────────────
+// Δ_call = e^{-qT}·Φ(d1)
+// Δ_put  = -e^{-qT}·Φ(-d1)
+function bsmDelta(S, K, T, r, q, s, isCall) {
+  if (T <= 1e-9) return (isCall ? 1 : -1) * ((isCall ? 1 : -1) * (S - K) > 0 ? 1 : 0);
+  const phi = isCall ? 1 : -1;
+  return phi * Math.exp(-q * T) * normCDF(phi * bsmD1(S, K, T, r, q, s));
+}
+
+// ── Gamma ──────────────────────────────────────────────────────
+// Γ = e^{-qT}·φ(d1) / (S·σ·√T)   [same call and put]
+function bsmGamma(S, K, T, r, q, s) {
+  if (T <= 1e-9 || s <= 1e-9) return 0;
+  return Math.exp(-q * T) * normPDF(bsmD1(S, K, T, r, q, s)) / (S * s * Math.sqrt(T));
+}
+
+// ── Vega ───────────────────────────────────────────────────────
+// ν_raw = S·e^{-qT}·φ(d1)·√T   [per unit σ decimal, same call and put]
+// ν_per1pct = ν_raw / 100       [$ change per 1% vol move]
+function bsmVegaRaw(S, K, T, r, q, s) {
+  if (T <= 1e-9) return 0;
+  return S * Math.exp(-q * T) * normPDF(bsmD1(S, K, T, r, q, s)) * Math.sqrt(T);
+}
+function bsmVegaPer1Pct(S, K, T, r, q, s) { return bsmVegaRaw(S, K, T, r, q, s) / 100; }
+
+// ── Theta ──────────────────────────────────────────────────────
+// Θ = -S·e^{-qT}·φ(d1)·σ/(2√T) - φ·r·K·e^{-rT}·Φ(φ·d2) + φ·q·S·e^{-qT}·Φ(φ·d1)
+// Returns per calendar day (divided by 365).
+function bsmTheta(S, K, T, r, q, s, isCall) {
+  if (T <= 1e-9) return 0;
+  const phi = isCall ? 1 : -1;
+  const d1 = bsmD1(S, K, T, r, q, s), d2 = bsmD2(S, K, T, r, q, s);
+  const dfq = Math.exp(-q * T), dfr = Math.exp(-r * T);
+  return (- S * dfq * normPDF(d1) * s / (2 * Math.sqrt(T))
+          - phi * r * K * dfr * normCDF(phi * d2)
+          + phi * q * S * dfq * normCDF(phi * d1)) / 365;
+}
+
+// ── Rho ────────────────────────────────────────────────────────
+// ρ_raw = φ·K·T·e^{-rT}·Φ(φ·d2)   [per unit r decimal]
+// ρ_per1pct = ρ_raw / 100
+function bsmRhoPer1Pct(S, K, T, r, q, s, isCall) {
+  if (T <= 1e-9) return 0;
+  const phi = isCall ? 1 : -1;
+  return phi * K * T * Math.exp(-r * T) * normCDF(phi * bsmD2(S, K, T, r, q, s)) / 100;
+}
+
+// ── Vanna ──────────────────────────────────────────────────────
+// Vanna = -e^{-qT}·φ(d1)·d2/σ   [same call and put]
+// = ∂Δ/∂σ = ∂ν/∂S   [cross-derivative, per unit σ]
+function bsmVanna(S, K, T, r, q, s) {
+  if (T <= 1e-9 || s <= 1e-9) return 0;
+  const d1 = bsmD1(S, K, T, r, q, s), d2 = bsmD2(S, K, T, r, q, s);
+  return -Math.exp(-q * T) * normPDF(d1) * d2 / s;
+}
+
+// ── Volga ──────────────────────────────────────────────────────
+// Volga = ν_raw · d1·d2/σ   [same call and put, per unit σ²]
+// where ν_raw = S·e^{-qT}·φ(d1)·√T
+function bsmVolga(S, K, T, r, q, s) {
+  if (T <= 1e-9 || s <= 1e-9) return 0;
+  const d1 = bsmD1(S, K, T, r, q, s), d2 = bsmD2(S, K, T, r, q, s);
+  return bsmVegaRaw(S, K, T, r, q, s) * d1 * d2 / s;
+}
+
+// ── Charm ──────────────────────────────────────────────────────
+// Charm = dΔ/dt = -dΔ/dT  (delta decay as calendar time passes)
+//
+// Derivation:
+//   d(d1)/dT = [2(r-q)T - d2·σ·√T] / (2σ·T^{3/2})
+//   Charm_call = q·e^{-qT}·Φ(d1)  - e^{-qT}·φ(d1)·∂d1/∂T
+//   Charm_put  = -q·e^{-qT}·Φ(-d1) + e^{-qT}·φ(d1)·∂d1/∂T
+// Unified: Charm = e^{-qT} · [φ·q·Φ(φ·d1) - φ(d1)·∂d1/∂T]
+//
+// Per calendar day (divided by 365).
+function bsmCharm(S, K, T, r, q, s, isCall) {
+  if (T <= 1e-9 || s <= 1e-9) return 0;
+  const phi = isCall ? 1 : -1;
+  const d1 = bsmD1(S, K, T, r, q, s), d2 = bsmD2(S, K, T, r, q, s);
+  const sqT = Math.sqrt(T);
+  // ∂d1/∂T = [2(r-q)T - d2·σ·√T] / (2σ·T^{3/2})
+  const dd1dT = (2 * (r - q) * T - d2 * s * sqT) / (2 * s * Math.pow(T, 1.5));
+  return Math.exp(-q * T) * (phi * q * normCDF(phi * d1) - normPDF(d1) * dd1dT) / 365;
+}
+
+// ── Speed ──────────────────────────────────────────────────────
+// Speed = ∂Γ/∂S = -(Γ/S)·(d1/(σ√T) + 1)
+function bsmSpeed(S, K, T, r, q, s) {
+  if (T <= 1e-9 || s <= 1e-9) return 0;
+  const d1 = bsmD1(S, K, T, r, q, s);
+  return -bsmGamma(S, K, T, r, q, s) / S * (d1 / (s * Math.sqrt(T)) + 1);
+}
+
+// ── Implied Vol — Newton-Raphson ────────────────────────────────
+function impliedVol(target, S, K, T, r, q, isCall) {
+  let s = 0.30;
+  for (let i = 0; i < 100; i++) {
+    const pv = bsmPrice(S, K, T, r, q, s, isCall);
+    const res = pv - target;
+    if (Math.abs(res) < 1e-10) return s;
+    const v = bsmVegaRaw(S, K, T, r, q, s);
+    if (v < 1e-14) break;
+    s -= res / v;
+    s = Math.max(1e-6, Math.min(s, 10));
+  }
+  return s;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SLIDER DEFINITIONS
+// ════════════════════════════════════════════════════════════════
+
+const PARAMS = [
+  { id:'S',    label:'S',    min:50,  max:500, step:1,    val:450,  fmt:v=>v.toFixed(1) },
+  { id:'K',    label:'K',    min:50,  max:500, step:1,    val:460,  fmt:v=>v.toFixed(1) },
+  { id:'T',    label:'T(d)', min:1,   max:730, step:1,    val:45,   fmt:v=>v+'d' },
+  { id:'r',    label:'r(%)', min:0,   max:12,  step:0.05, val:5.3,  fmt:v=>v.toFixed(2)+'%' },
+  { id:'q',    label:'q(%)', min:0,   max:10,  step:0.05, val:1.3,  fmt:v=>v.toFixed(2)+'%' },
+  { id:'sig',  label:'σ(%)', min:1,   max:150, step:0.5,  val:18,   fmt:v=>v.toFixed(1)+'%' },
+];
+const V = {};
+PARAMS.forEach(p => { V[p.id] = p.val; });
+
+const slidersEl = document.getElementById('sliders');
+PARAMS.forEach(p => {
+  const div = document.createElement('div');
+  div.className = 'srow';
+  const lbl = document.createElement('label'); lbl.textContent = p.label;
+  const inp = document.createElement('input');
+  inp.type='range'; inp.min=p.min; inp.max=p.max; inp.step=p.step; inp.value=p.val;
+  const val = document.createElement('span');
+  val.className='sval'; val.id='sv_'+p.id; val.textContent=p.fmt(p.val);
+  inp.addEventListener('input', () => {
+    V[p.id] = +inp.value;
+    val.textContent = p.fmt(+inp.value);
+    update();
+  });
+  div.append(lbl, inp, val);
+  slidersEl.appendChild(div);
+});
+document.querySelectorAll('input[name=ot]').forEach(r => r.addEventListener('change', update));
+
+// ════════════════════════════════════════════════════════════════
+//  UPDATE
+// ════════════════════════════════════════════════════════════════
+
+function getP() {
+  return {
+    S: V.S, K: V.K, T: V.T / 365,
+    r: V.r / 100, q: V.q / 100,
+    s: V.sig / 100,
+    isCall: document.querySelector('input[name=ot]:checked').value === 'call',
+  };
+}
+
+function fmt(v, d=6) { return isFinite(v) ? v.toFixed(d) : '—'; }
+
+let DRAW_RAF = 0;
+
+function update() {
+  const { S, K, T, r, q, s, isCall } = getP();
+  const phi = isCall ? 1 : -1;
+
+  const d1 = bsmD1(S, K, T, r, q, s);
+  const d2 = bsmD2(S, K, T, r, q, s);
+  const F  = S * Math.exp((r - q) * T);
+  const pv = bsmPrice(S, K, T, r, q, s, isCall);
+  const intr = Math.max(phi * (S - K), 0);
+
+  // ── Pricing
+  document.getElementById('rPrice').textContent  = fmt(pv, 4);
+  document.getElementById('rIntr').textContent   = fmt(intr, 4);
+  document.getElementById('rTV').textContent     = fmt(pv - intr, 4);
+  document.getElementById('rFwd').textContent    = fmt(F, 4);
+  document.getElementById('rD1').textContent     = fmt(d1, 6);
+  document.getElementById('rD2').textContent     = fmt(d2, 6);
+  document.getElementById('rLFM').textContent    = fmt(Math.log(F / K), 6);
+
+  // ── First-order Greeks
+  document.getElementById('rDelta').textContent  = fmt(bsmDelta(S,K,T,r,q,s,isCall), 6);
+  document.getElementById('rGamma').textContent  = fmt(bsmGamma(S,K,T,r,q,s), 6);
+  // Vega displayed per 1% vol move (divide raw by 100)
+  document.getElementById('rVega').textContent   = fmt(bsmVegaPer1Pct(S,K,T,r,q,s), 6);
+  document.getElementById('rTheta').textContent  = fmt(bsmTheta(S,K,T,r,q,s,isCall), 6);
+  // Rho displayed per 1% rate move
+  document.getElementById('rRho').textContent    = fmt(bsmRhoPer1Pct(S,K,T,r,q,s,isCall), 6);
+
+  // ── Second-order Greeks
+  document.getElementById('rVanna').textContent  = fmt(bsmVanna(S,K,T,r,q,s), 6);
+  document.getElementById('rVolga').textContent  = fmt(bsmVolga(S,K,T,r,q,s), 6);
+  document.getElementById('rCharm').textContent  = fmt(bsmCharm(S,K,T,r,q,s,isCall), 6);
+  document.getElementById('rSpeed').textContent  = fmt(bsmSpeed(S,K,T,r,q,s), 6);
+
+  // ── Header stats
+  const C = bsmPrice(S,K,T,r,q,s,true), P = bsmPrice(S,K,T,r,q,s,false);
+  const pcp = Math.abs((C - P) - (S*Math.exp(-q*T) - K*Math.exp(-r*T)));
+  document.getElementById('hPCP').textContent = pcp.toExponential(2);
+
+  const iv = impliedVol(pv, S, K, T, r, q, isCall);
+  const ivErr = Math.abs(iv - s) * 1e8;
+  document.getElementById('hIV').textContent = ivErr.toFixed(2) + 'e-8';
+
+  if (DRAW_RAF) cancelAnimationFrame(DRAW_RAF);
+  DRAW_RAF = requestAnimationFrame(() => {
+    drawCharts(S, K, T, r, q, s, isCall, pv);
+    drawMatrix(S, K, T, r, q, s, isCall, pv);
+    DRAW_RAF = 0;
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  CHARTS
+// ════════════════════════════════════════════════════════════════
+
+const C_BLUE  = '#4f8ef7';
+const C_CYAN  = '#38c8e0';
+const C_GREEN = '#45c97b';
+const C_RED   = '#e05050';
+const C_AMB   = '#f0a030';
+const C_PUR   = '#a077f0';
+const C_DIM   = '#1e1a28';
+const C_MUTE  = '#4a4060';
+
+function setupCanvas(id) {
+  const el  = document.getElementById(id);
+  const par = el.parentElement;
+  const W   = Math.max(220, par.clientWidth  - 24);
+  const H   = Math.max(140, par.clientHeight - 28);
+  el.width  = W * devicePixelRatio;
+  el.height = H * devicePixelRatio;
+  el.style.width  = W + 'px';
+  el.style.height = H + 'px';
+  const ctx = el.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+  return { ctx, W, H };
+}
+
+function drawAxes(ctx, W, H, pad, minV, maxV, nY=4, fmtFn=null) {
+  ctx.strokeStyle = C_DIM; ctx.lineWidth = 0.5;
+  ctx.fillStyle   = C_MUTE; ctx.font = '9px Consolas'; ctx.textAlign = 'right';
+  const ch = H - pad.t - pad.b;
+  for (let i = 0; i <= nY; i++) {
+    const v = minV + (maxV - minV) * i / nY;
+    const y = pad.t + ch * (1 - (v - minV) / (maxV - minV));
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    const label = fmtFn ? fmtFn(v) : v.toFixed(Math.abs(v) < 0.01 ? 4 : 2);
+    ctx.fillText(label, pad.l - 3, y + 3);
+  }
+}
+
+function drawLine(ctx, xs, ys, color, lw=1.5, glow=false) {
+  if (glow) { ctx.shadowColor = color; ctx.shadowBlur = 7; }
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = lw;
+  xs.forEach((x, i) => i === 0 ? ctx.moveTo(x, ys[i]) : ctx.lineTo(x, ys[i]));
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+function mapY(v, minV, maxV, pt, ch) {
+  return pt + ch * (1 - (v - minV) / (maxV - minV));
+}
+
+function drawCharts(S, K, T, r, q, s, isCall, pvBase) {
+  const N  = 120;
+  const lo = S * 0.5, hi = S * 1.5;
+  const spots = Array.from({ length: N + 1 }, (_, i) => lo + (hi - lo) * i / N);
+  const pad = { t: 10, r: 8, b: 22, l: 46 };
+
+  // ── 1. Price & Payoff ──────────────────────────────────────────
+  {
+    const { ctx, W, H } = setupCanvas('cPay');
+    const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+    const phi = isCall ? 1 : -1;
+    const prices  = spots.map(Sv => bsmPrice(Sv, K, T, r, q, s, isCall));
+    const payoffs = spots.map(Sv => Math.max(phi * (Sv - K), 0));
+    const maxV    = Math.max(...prices, ...payoffs) * 1.08 + 0.01;
+    const minV    = 0;
+
+    drawAxes(ctx, W, H, pad, minV, maxV);
+    const xOf = i => pad.l + cw * i / N;
+    const yOf = (v) => mapY(v, minV, maxV, pad.t, ch);
+
+    // K vertical
+    const xK = pad.l + cw * (K - lo) / (hi - lo);
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = C_DIM; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xK, pad.t); ctx.lineTo(xK, H - pad.b); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // payoff (dim)
+    drawLine(ctx, spots.map((_, i) => xOf(i)), payoffs.map(v => yOf(v)), C_DIM, 1);
+    // price (bright)
+    drawLine(ctx, spots.map((_, i) => xOf(i)), prices.map(v => yOf(v)), C_CYAN, 2, true);
+
+    // current spot dot
+    const xS  = pad.l + cw * (S - lo) / (hi - lo);
+    const yPv = mapY(pvBase, minV, maxV, pad.t, ch);
+    ctx.beginPath(); ctx.arc(xS, yPv, 4, 0, Math.PI * 2);
+    ctx.fillStyle = C_CYAN; ctx.fill();
+
+    // x axis labels
+    ctx.fillStyle = C_MUTE; ctx.textAlign = 'center'; ctx.font = '9px Consolas';
+    [0, 0.25, 0.5, 0.75, 1].forEach(f =>
+      ctx.fillText((lo + f * (hi - lo)).toFixed(0), pad.l + cw * f, H - 4));
+  }
+
+  // ── 2. Delta & Gamma ───────────────────────────────────────────
+  {
+    const { ctx, W, H } = setupCanvas('cDG');
+    const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+    const deltas = spots.map(Sv => bsmDelta(Sv, K, T, r, q, s, isCall));
+    const gammas = spots.map(Sv => bsmGamma(Sv, K, T, r, q, s));
+    const allV   = [...deltas, ...gammas];
+    const minV   = Math.min(...allV) * 1.05 - 0.01;
+    const maxV   = Math.max(...allV) * 1.05 + 0.01;
+
+    drawAxes(ctx, W, H, pad, minV, maxV);
+
+    // zero line
+    const y0 = mapY(0, minV, maxV, pad.t, ch);
+    ctx.strokeStyle = '#2a2240'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, y0); ctx.lineTo(W - pad.r, y0); ctx.stroke();
+
+    const xOf = i => pad.l + cw * i / N;
+    drawLine(ctx, spots.map((_, i) => xOf(i)), deltas.map(v => mapY(v, minV, maxV, pad.t, ch)), C_BLUE, 2, true);
+    drawLine(ctx, spots.map((_, i) => xOf(i)), gammas.map(v => mapY(v, minV, maxV, pad.t, ch)), C_AMB, 1.5);
+
+    // current spot
+    const xS = pad.l + cw * (S - lo) / (hi - lo);
+    ctx.strokeStyle = '#2a2240'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(xS, pad.t); ctx.lineTo(xS, H - pad.b); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = C_BLUE; ctx.font = '9px Consolas'; ctx.textAlign = 'left';
+    ctx.fillText('Δ', pad.l + 4, pad.t + 12);
+    ctx.fillStyle = C_AMB; ctx.fillText('Γ', pad.l + 18, pad.t + 12);
+
+    ctx.fillStyle = C_MUTE; ctx.textAlign = 'center';
+    [0, 0.5, 1].forEach(f => ctx.fillText((lo + f * (hi - lo)).toFixed(0), pad.l + cw * f, H - 4));
+  }
+
+  // ── 3. Vega & Theta ─────────────────────────────────────────────
+  {
+    const { ctx, W, H } = setupCanvas('cVT');
+    const padL = { ...pad, l: 52 };
+    const cw = W - padL.l - padL.r, ch = H - padL.t - padL.b;
+    // Vega displayed per 1% vol pt, Theta per day
+    const vegas  = spots.map(Sv => bsmVegaPer1Pct(Sv, K, T, r, q, s));
+    const thetas = spots.map(Sv => bsmTheta(Sv, K, T, r, q, s, isCall));
+    const allV   = [...vegas, ...thetas];
+    const minV   = Math.min(...allV) * 1.05 - 0.001;
+    const maxV   = Math.max(...allV) * 1.05 + 0.001;
+
+    drawAxes(ctx, W, H, padL, minV, maxV);
+
+    const y0 = mapY(0, minV, maxV, padL.t, ch);
+    ctx.strokeStyle = '#2a2240'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL.l, y0); ctx.lineTo(W - padL.r, y0); ctx.stroke();
+
+    const xOf = i => padL.l + cw * i / N;
+    drawLine(ctx, spots.map((_, i) => xOf(i)), vegas.map(v  => mapY(v, minV, maxV, padL.t, ch)), C_GREEN, 1.5, true);
+    drawLine(ctx, spots.map((_, i) => xOf(i)), thetas.map(v => mapY(v, minV, maxV, padL.t, ch)), C_RED, 1.5);
+
+    ctx.fillStyle = C_GREEN; ctx.font = '9px Consolas'; ctx.textAlign = 'left';
+    ctx.fillText('ν/1%', padL.l + 4, padL.t + 12);
+    ctx.fillStyle = C_RED; ctx.fillText('Θ/d', padL.l + 32, padL.t + 12);
+    ctx.fillStyle = C_MUTE; ctx.textAlign = 'center';
+    [0, 0.5, 1].forEach(f => ctx.fillText((lo + f * (hi - lo)).toFixed(0), padL.l + cw * f, H - 4));
+  }
+
+  // ── 4. Price vs Vol ─────────────────────────────────────────────
+  {
+    const { ctx, W, H } = setupCanvas('cVol');
+    const padL = { ...pad, l: 52 };
+    const cw = W - padL.l - padL.r, ch = H - padL.t - padL.b;
+    const sLo = 0.02, sHi = 1.0;
+    const M = 120;
+    const sigs = Array.from({ length: M + 1 }, (_, i) => sLo + (sHi - sLo) * i / M);
+    const pvs  = sigs.map(sv => bsmPrice(S, K, T, r, q, sv, isCall));
+    const minV = 0, maxV = Math.max(...pvs) * 1.08 + 0.01;
+
+    drawAxes(ctx, W, H, padL, minV, maxV);
+    const xOf = i => padL.l + cw * i / M;
+    drawLine(ctx, sigs.map((_, i) => xOf(i)), pvs.map(v => mapY(v, minV, maxV, padL.t, ch)), C_CYAN, 2, true);
+
+    // current vol dot
+    const xSig = padL.l + cw * (s - sLo) / (sHi - sLo);
+    const yCur = mapY(pvBase, minV, maxV, padL.t, ch);
+    ctx.strokeStyle = '#2a2240'; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(xSig, padL.t); ctx.lineTo(xSig, H - padL.b); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(xSig, yCur, 4, 0, Math.PI * 2);
+    ctx.fillStyle = C_CYAN; ctx.fill();
+
+    ctx.fillStyle = C_MUTE; ctx.textAlign = 'center'; ctx.font = '9px Consolas';
+    [0, 0.25, 0.5, 0.75, 1].forEach(f =>
+      ctx.fillText(((sLo + f * (sHi - sLo)) * 100).toFixed(0) + '%', padL.l + cw * f, H - 4));
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  SCENARIO MATRIX
+// ════════════════════════════════════════════════════════════════
+
+const SSPOT = [-0.20, -0.10, -0.05, 0, 0.05, 0.10, 0.20];
+const SVOL  = [-0.10, -0.05, 0, 0.05, 0.10];  // absolute volatility-point shocks, e.g. +0.10 = +10 vol pts
+
+function signed(v, d=3) {
+  return (v >= 0 ? '+' : '') + v.toFixed(d);
+}
+
+function pnlHeatStyle(pnl, maxAbs) {
+  if (maxAbs <= 1e-12 || Math.abs(pnl) <= 0.0005) {
+    return 'background:rgba(160,119,240,.10);color:#c8bddc;border-color:rgba(160,119,240,.12);';
+  }
+  const a = Math.min(0.78, 0.16 + 0.62 * Math.pow(Math.abs(pnl) / maxAbs, 0.72));
+  if (pnl > 0) return `background:rgba(69,201,123,${a});color:#06140c;border-color:rgba(69,201,123,.38);`;
+  return `background:rgba(224,80,80,${a});color:#1b0505;border-color:rgba(224,80,80,.38);`;
+}
+
+function drawMatrix(S, K, T, r, q, s, isCall, pvBase) {
+  const cells = [];
+  SSPOT.forEach(ds => {
+    SVOL.forEach(dv => {
+      const S2   = S * (1 + ds);
+      const sig2 = Math.max(0.005, s + dv);
+      const pv2  = bsmPrice(S2, K, T, r, q, sig2, isCall);
+      cells.push({ ds, dv, S2, sig2, pv: pv2, pnl: pv2 - pvBase });
+    });
+  });
+
+  const maxAbs = Math.max(...cells.map(c => Math.abs(c.pnl)), 1e-12);
+  const maxCell = cells.reduce((a, b) => b.pnl > a.pnl ? b : a, cells[0]);
+  const minCell = cells.reduce((a, b) => b.pnl < a.pnl ? b : a, cells[0]);
+
+  const stats = document.getElementById('matStats');
+  if (stats) {
+    stats.innerHTML = `
+      <span class="mchip base">Base ${pvBase.toFixed(3)}</span>
+      <span class="mchip pos">Max ${signed(maxCell.pnl, 3)}</span>
+      <span class="mchip neg">Min ${signed(minCell.pnl, 3)}</span>
+    `;
+  }
+
+  const byKey = new Map(cells.map(c => [`${c.ds}|${c.dv}`, c]));
+  const tbl = document.createElement('table');
+  tbl.className = 'mat';
+
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  let th = document.createElement('th');
+  th.textContent = 'Spot \\ Vol';
+  th.className = 'mat-corner';
+  hr.appendChild(th);
+  SVOL.forEach(dv => {
+    th = document.createElement('th');
+    th.textContent = (dv >= 0 ? '+' : '') + (dv * 100).toFixed(0) + ' vol pts';
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  tbl.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  SSPOT.forEach(ds => {
+    const tr = document.createElement('tr');
+    const td0 = document.createElement('td');
+    td0.className = 'mat-rowhdr';
+    td0.textContent = (ds >= 0 ? '+' : '') + (ds * 100).toFixed(0) + '% spot';
+    tr.appendChild(td0);
+
+    SVOL.forEach(dv => {
+      const c = byKey.get(`${ds}|${dv}`);
+      const td = document.createElement('td');
+      td.textContent = signed(c.pnl, 3);
+      td.className = c.pnl > 0.0005 ? 'cp' : c.pnl < -0.0005 ? 'cn' : 'cz';
+      td.setAttribute('title', `Spot ${c.S2.toFixed(2)} | Vol ${(c.sig2*100).toFixed(2)}% | Price ${c.pv.toFixed(4)} | P&L ${signed(c.pnl, 4)}`);
+      td.setAttribute('style', pnlHeatStyle(c.pnl, maxAbs));
+      if (ds === 0 && dv === 0) td.classList.add('mat-zero');
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+
+  const wrap = document.getElementById('matWrap');
+  wrap.innerHTML = '';
+  wrap.appendChild(tbl);
+}
+// ── Init ──────────────────────────────────────────────────────────
+update();
+let RESIZE_RAF = 0;
+window.addEventListener('resize', () => {
+  if (RESIZE_RAF) cancelAnimationFrame(RESIZE_RAF);
+  RESIZE_RAF = requestAnimationFrame(() => { update(); RESIZE_RAF = 0; });
+});
+</script>
+</body>
+</html>
