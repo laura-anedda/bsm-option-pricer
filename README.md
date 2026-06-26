@@ -284,7 +284,43 @@ attr = pnl_attribution(
 ```
 
 ---
+```bash
 
+pytest
+
+```
+
+---
+
+
+
+## Tests
+
+The test suite covers:
+
+
+
+```
+
+Known BSM pricing values
+
+Put-call parity
+
+Analytical Greeks vs finite differences
+
+Vanna, Volga and Charm finite-difference checks
+
+Greek sign and range properties
+
+Implied volatility round-trip
+
+P&L attribution consistency
+
+```
+
+
+
+---
 ## References
 
 1. Black & Scholes (1973). *The pricing of options and corporate liabilities.* JPE 81(3).
